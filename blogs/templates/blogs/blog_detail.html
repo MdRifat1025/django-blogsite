@@ -1,0 +1,192 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ blog.title }} - Blog Site{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+    <div class="row">
+        <div class="col-lg-8">
+            <!-- Blog Content -->
+            <article>
+                <h1 class="mb-3">{{ blog.title }}</h1>
+                
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div>
+                        <a href="{% url 'author-blogs' blog.author.username %}" class="text-decoration-none">
+                            {% if blog.author.profile.profile_picture %}
+                                <img src="{{ blog.author.profile.profile_picture.url }}" alt="{{ blog.author.username }}" class="profile-img me-2">
+                            {% endif %}
+                            <strong>{{ blog.author.username }}</strong>
+                        </a>
+                        <span class="text-muted ms-2">
+                            <i class="fas fa-calendar"></i> {{ blog.created_at|date:"F d, Y" }}
+                        </span>
+                    </div>
+                    
+                    <div>
+                        <span class="badge bg-primary">{{ blog.category.name }}</span>
+                        <span class="text-muted ms-2">
+                            <i class="fas fa-eye"></i> {{ blog.views }} views
+                        </span>
+                    </div>
+                </div>
+
+                {% if blog.image %}
+                    <img src="{{ blog.image.url }}" class="img-fluid mb-4 rounded" alt="{{ blog.title }}">
+                {% endif %}
+
+                <div class="blog-content">
+                    {{ blog.body|linebreaks }}
+                </div>
+
+                <hr class="my-4">
+
+                <!-- Actions -->
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <div>
+                        {% if user.is_authenticated %}
+                            {% if is_favorited %}
+                                <a href="{% url 'remove-favorite' blog.slug %}" class="btn btn-danger">
+                                    <i class="fas fa-heart"></i> Remove from Favorites
+                                </a>
+                            {% else %}
+                                <a href="{% url 'add-favorite' blog.slug %}" class="btn btn-outline-danger">
+                                    <i class="far fa-heart"></i> Add to Favorites
+                                </a>
+                            {% endif %}
+                            
+                            <a href="{% url 'rate-blog' blog.slug %}" class="btn btn-outline-warning ms-2">
+                                <i class="fas fa-star"></i> Rate this Blog
+                            </a>
+                        {% else %}
+                            <a href="{% url 'login' %}?next={{ request.path }}" class="btn btn-outline-danger">
+                                <i class="far fa-heart"></i> Login to Favorite
+                            </a>
+                        {% endif %}
+                    </div>
+
+                    {% if user == blog.author or user.is_staff %}
+                        <div>
+                            <a href="{% url 'blog-update' blog.slug %}" class="btn btn-outline-primary">
+                                <i class="fas fa-edit"></i> Edit
+                            </a>
+                            <a href="{% url 'blog-delete' blog.slug %}" class="btn btn-outline-danger ms-2">
+                                <i class="fas fa-trash"></i> Delete
+                            </a>
+                        </div>
+                    {% endif %}
+                </div>
+
+                <!-- Ratings Section -->
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <h4>
+                            <i class="fas fa-star star-rating"></i> Ratings & Reviews
+                            <span class="badge bg-primary">{{ rating_count }}</span>
+                        </h4>
+                        <p class="mb-0">
+                            Average Rating: 
+                            <strong class="star-rating">{{ average_rating|floatformat:1 }}/6</strong>
+                        </p>
+                    </div>
+                    <div class="card-body">
+                        {% if user.is_authenticated and user_rating %}
+                            <div class="alert alert-info">
+                                <strong>Your Rating: {{ user_rating.rating }}/6</strong>
+                                {% if user_rating.review %}
+                                    <p class="mb-0 mt-2">{{ user_rating.review }}</p>
+                                {% endif %}
+                            </div>
+                        {% endif %}
+
+                        {% if ratings %}
+                            {% for rating in ratings %}
+                                <div class="mb-3 pb-3 {% if not forloop.last %}border-bottom{% endif %}">
+                                    <div class="d-flex justify-content-between">
+                                        <strong>{{ rating.user.username }}</strong>
+                                        <span class="star-rating">
+                                            {% for i in "123456" %}
+                                                {% if forloop.counter <= rating.rating %}
+                                                    <i class="fas fa-star"></i>
+                                                {% else %}
+                                                    <i class="far fa-star"></i>
+                                                {% endif %}
+                                            {% endfor %}
+                                            {{ rating.rating }}/6
+                                        </span>
+                                    </div>
+                                    {% if rating.review %}
+                                        <p class="mt-2 mb-0">{{ rating.review }}</p>
+                                    {% endif %}
+                                    <small class="text-muted">{{ rating.created_at|date:"M d, Y" }}</small>
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="text-muted">No ratings yet. Be the first to rate this blog!</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </article>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="col-lg-4">
+            <!-- Author Info -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5><i class="fas fa-user"></i> About the Author</h5>
+                </div>
+                <div class="card-body text-center">
+                    {% if blog.author.profile.profile_picture %}
+                        <img src="{{ blog.author.profile.profile_picture.url }}" alt="{{ blog.author.username }}" class="rounded-circle mb-3" style="width: 100px; height: 100px; object-fit: cover;">
+                    {% endif %}
+                    <h5>{{ blog.author.username }}</h5>
+                    <p class="text-muted">{{ blog.author.profile.bio|default:"No bio available" }}</p>
+                    
+                    {% if blog.author.profile.twitter_url or blog.author.profile.facebook_url or blog.author.profile.linkedin_url or blog.author.profile.website_url %}
+                        <div class="social-links">
+                            {% if blog.author.profile.twitter_url %}
+                                <a href="{{ blog.author.profile.twitter_url }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                    <i class="fab fa-twitter"></i>
+                                </a>
+                            {% endif %}
+                            {% if blog.author.profile.facebook_url %}
+                                <a href="{{ blog.author.profile.facebook_url }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                    <i class="fab fa-facebook"></i>
+                                </a>
+                            {% endif %}
+                            {% if blog.author.profile.linkedin_url %}
+                                <a href="{{ blog.author.profile.linkedin_url }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                    <i class="fab fa-linkedin"></i>
+                                </a>
+                            {% endif %}
+                            {% if blog.author.profile.website_url %}
+                                <a href="{{ blog.author.profile.website_url }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-globe"></i>
+                                </a>
+                            {% endif %}
+                        </div>
+                    {% endif %}
+                    
+                    <a href="{% url 'author-blogs' blog.author.username %}" class="btn btn-primary btn-sm mt-3">
+                        View All Posts
+                    </a>
+                </div>
+            </div>
+
+            <!-- Category -->
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-folder"></i> Category</h5>
+                </div>
+                <div class="card-body">
+                    <a href="{% url 'blog-category' blog.category.slug %}" class="btn btn-outline-primary">
+                        {{ blog.category.name }}
+                    </a>
+                    <p class="text-muted mt-2 mb-0">{{ blog.category.description }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

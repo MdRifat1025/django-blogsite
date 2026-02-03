@@ -1,0 +1,142 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ profile_user.username }}'s Profile - Blog Site{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+    <div class="row">
+        <!-- Profile Info -->
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-body text-center">
+                    {% if profile.profile_picture %}
+                        <img src="{{ profile.profile_picture.url }}" alt="{{ profile_user.username }}" 
+                             class="rounded-circle mb-3" style="width: 150px; height: 150px; object-fit: cover;">
+                    {% else %}
+                        <div class="rounded-circle bg-primary text-white d-inline-flex align-items-center justify-content-center mb-3"
+                             style="width: 150px; height: 150px; font-size: 3rem;">
+                            {{ profile_user.username|first|upper }}
+                        </div>
+                    {% endif %}
+                    
+                    <h3>{{ profile_user.username }}</h3>
+                    <p class="text-muted">{{ profile_user.email }}</p>
+                    
+                    <span class="badge bg-primary mb-3">{{ profile_user.get_role_display }}</span>
+                    
+                    {% if profile.bio %}
+                        <p class="mt-3">{{ profile.bio }}</p>
+                    {% endif %}
+                    
+                    <!-- Social Links -->
+                    {% if profile.twitter_url or profile.facebook_url or profile.linkedin_url or profile.website_url %}
+                        <div class="social-links mt-3">
+                            {% if profile.twitter_url %}
+                                <a href="{{ profile.twitter_url }}" target="_blank" class="btn btn-outline-primary btn-sm me-2">
+                                    <i class="fab fa-twitter"></i>
+                                </a>
+                            {% endif %}
+                            {% if profile.facebook_url %}
+                                <a href="{{ profile.facebook_url }}" target="_blank" class="btn btn-outline-primary btn-sm me-2">
+                                    <i class="fab fa-facebook"></i>
+                                </a>
+                            {% endif %}
+                            {% if profile.linkedin_url %}
+                                <a href="{{ profile.linkedin_url }}" target="_blank" class="btn btn-outline-primary btn-sm me-2">
+                                    <i class="fab fa-linkedin"></i>
+                                </a>
+                            {% endif %}
+                            {% if profile.website_url %}
+                                <a href="{{ profile.website_url }}" target="_blank" class="btn btn-outline-primary btn-sm">
+                                    <i class="fas fa-globe"></i>
+                                </a>
+                            {% endif %}
+                        </div>
+                    {% endif %}
+                    
+                    {% if is_own_profile %}
+                        <a href="{% url 'edit-profile' %}" class="btn btn-primary w-100 mt-3">
+                            <i class="fas fa-edit"></i> Edit Profile
+                        </a>
+                    {% endif %}
+                    
+                    <hr class="my-3">
+                    
+                    <div class="text-start">
+                        <p class="mb-1"><strong>Member since:</strong></p>
+                        <p class="text-muted">{{ profile.created_at|date:"F Y" }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Content -->
+        <div class="col-lg-8">
+            <!-- Blogs (for authors) -->
+            {% if blogs %}
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h4><i class="fas fa-blog"></i> Published Blogs</h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="list-group">
+                            {% for blog in blogs %}
+                                <a href="{% url 'blog-detail' blog.slug %}" class="list-group-item list-group-item-action">
+                                    <div class="d-flex w-100 justify-content-between">
+                                        <h5 class="mb-1">{{ blog.title }}</h5>
+                                        <small class="text-muted">{{ blog.created_at|date:"M d, Y" }}</small>
+                                    </div>
+                                    <p class="mb-1">{{ blog.body|truncatewords:20 }}</p>
+                                    <small>
+                                        <span class="badge bg-primary">{{ blog.category.name }}</span>
+                                        <span class="ms-2"><i class="fas fa-star star-rating"></i> {{ blog.average_rating|floatformat:1 }}</span>
+                                        <span class="ms-2"><i class="fas fa-eye"></i> {{ blog.views }} views</span>
+                                    </small>
+                                </a>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+
+            <!-- Favorites -->
+            {% if favorites %}
+                <div class="card">
+                    <div class="card-header">
+                        <h4><i class="fas fa-heart"></i> Favorite Blogs</h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="list-group">
+                            {% for favorite in favorites|slice:":5" %}
+                                <a href="{% url 'blog-detail' favorite.blog.slug %}" class="list-group-item list-group-item-action">
+                                    <div class="d-flex w-100 justify-content-between">
+                                        <h5 class="mb-1">{{ favorite.blog.title }}</h5>
+                                        <small class="text-muted">{{ favorite.created_at|date:"M d, Y" }}</small>
+                                    </div>
+                                    <p class="mb-1">{{ favorite.blog.body|truncatewords:15 }}</p>
+                                    <small class="text-muted">By {{ favorite.blog.author.username }}</small>
+                                </a>
+                            {% endfor %}
+                        </div>
+                        {% if favorites.count > 5 %}
+                            <div class="text-center mt-3">
+                                <a href="{% url 'my-favorites' %}" class="btn btn-outline-primary">
+                                    View All Favorites
+                                </a>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            {% else %}
+                {% if is_own_profile %}
+                    <div class="alert alert-info">
+                        <h5>No favorite blogs yet</h5>
+                        <p>Start exploring and add blogs to your favorites!</p>
+                        <a href="{% url 'blog-home' %}" class="btn btn-primary">Browse Blogs</a>
+                    </div>
+                {% endif %}
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
