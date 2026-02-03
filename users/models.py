@@ -3,7 +3,7 @@ from django.contrib.auth.models import AbstractUser
 from django.utils.translation import gettext_lazy as _
 
 class CustomUser(AbstractUser):
-    """Extended User model with role-based access"""
+    
     
     ROLE_CHOICES = (
         ('reader', 'Reader'),

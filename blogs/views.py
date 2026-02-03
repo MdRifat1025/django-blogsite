@@ -11,17 +11,15 @@ from users.models import CustomUser
 
 
 def blog_home(request):
-    """Home page with list of all blogs with search and filtering"""
+    """Home page with list of all blogs with search, filtering, sorting, and pagination"""
     
     blogs = Blog.objects.all()
     form = BlogSearchForm(request.GET)
     
-    # Search by title or body
+    # Search
     search_query = request.GET.get('search')
     if search_query:
-        blogs = blogs.filter(
-            Q(title__icontains=search_query) | Q(body__icontains=search_query)
-        )
+        blogs = blogs.filter(Q(title__icontains=search_query) | Q(body__icontains=search_query))
     
     # Filter by category
     category = request.GET.get('category')
@@ -39,16 +37,17 @@ def blog_home(request):
         blogs = blogs.order_by('-created_at')
     elif sort_by == '-date':
         blogs = blogs.order_by('created_at')
-    elif sort_by == 'rating':
-        # Sort by average rating
-        blogs = sorted(blogs, key=lambda x: x.average_rating, reverse=True)
-    elif sort_by == '-rating':
-        blogs = sorted(blogs, key=lambda x: x.average_rating)
+    elif sort_by in ['rating', '-rating']:
+        blogs = blogs.annotate(avg_rating=Avg('ratings__rating'))
+        if sort_by == 'rating':
+            blogs = blogs.order_by('-avg_rating')
+        else:
+            blogs = blogs.order_by('avg_rating')
     elif sort_by == 'views':
         blogs = blogs.order_by('-views')
     
     # Pagination
-    paginator = Paginator(blogs, 9)  # 9 blogs per page
+    paginator = Paginator(blogs, 9)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
     
@@ -70,10 +69,8 @@ def blog_detail(request, slug):
     blog.views += 1
     blog.save(update_fields=['views'])
     
-    # Get all ratings for this blog
+    # Ratings
     ratings = blog.ratings.all().order_by('-created_at')
-    
-    # Check if user has already rated
     user_rating = None
     is_favorited = False
     
@@ -81,13 +78,17 @@ def blog_detail(request, slug):
         user_rating = Rating.objects.filter(blog=blog, user=request.user).first()
         is_favorited = Favorite.objects.filter(blog=blog, user=request.user).exists()
     
+    # Average rating
+    average_rating = blog.ratings.aggregate(avg=Avg('rating'))['avg'] or 0
+    rating_count = blog.ratings.count()
+    
     context = {
         'blog': blog,
         'ratings': ratings,
         'user_rating': user_rating,
         'is_favorited': is_favorited,
-        'average_rating': blog.average_rating,
-        'rating_count': blog.rating_count,
+        'average_rating': round(average_rating, 2),
+        'rating_count': rating_count,
     }
     
     return render(request, 'blogs/blog_detail.html', context)
@@ -97,7 +98,6 @@ def blog_detail(request, slug):
 def blog_create(request):
     """Create a new blog post (Authors only)"""
     
-    # Check if user is an author
     if request.user.role not in ['author', 'admin']:
         messages.error(request, 'Only authors can create blog posts.')
         return redirect('blog-home')
@@ -122,8 +122,7 @@ def blog_update(request, slug):
     
     blog = get_object_or_404(Blog, slug=slug)
     
-    # Check if user is the author or admin
-    if blog.author != request.user and not request.user.is_staff:
+    if blog.author != request.user and request.user.role != 'admin':
         messages.error(request, 'You can only edit your own blog posts.')
         return redirect('blog-detail', slug=blog.slug)
     
@@ -136,11 +135,7 @@ def blog_update(request, slug):
     else:
         form = BlogForm(instance=blog)
     
-    return render(request, 'blogs/blog_form.html', {
-        'form': form,
-        'title': 'Edit Blog',
-        'blog': blog
-    })
+    return render(request, 'blogs/blog_form.html', {'form': form, 'title': 'Edit Blog', 'blog': blog})
 
 
 @login_required
@@ -149,8 +144,7 @@ def blog_delete(request, slug):
     
     blog = get_object_or_404(Blog, slug=slug)
     
-    # Check if user is the author or admin
-    if blog.author != request.user and not request.user.is_staff:
+    if blog.author != request.user and request.user.role != 'admin':
         messages.error(request, 'You can only delete your own blog posts.')
         return redirect('blog-detail', slug=blog.slug)
     
@@ -171,38 +165,24 @@ def rate_blog(request, slug):
     if request.method == 'POST':
         form = RatingForm(request.POST)
         if form.is_valid():
-            # Check if user has already rated
             existing_rating = Rating.objects.filter(blog=blog, user=request.user).first()
-            
             if existing_rating:
-                # Update existing rating
                 existing_rating.rating = form.cleaned_data['rating']
                 existing_rating.review = form.cleaned_data['review']
                 existing_rating.save()
                 messages.success(request, 'Your rating has been updated!')
             else:
-                # Create new rating
                 rating = form.save(commit=False)
                 rating.blog = blog
                 rating.user = request.user
                 rating.save()
                 messages.success(request, 'Thank you for rating this blog!')
-            
             return redirect('blog-detail', slug=blog.slug)
     else:
-        # Pre-fill form if user has already rated
         existing_rating = Rating.objects.filter(blog=blog, user=request.user).first()
-        if existing_rating:
-            form = RatingForm(instance=existing_rating)
-        else:
-            form = RatingForm()
+        form = RatingForm(instance=existing_rating) if existing_rating else RatingForm()
     
-    context = {
-        'form': form,
-        'blog': blog,
-    }
-    
-    return render(request, 'blogs/rate_blog.html', context)
+    return render(request, 'blogs/rate_blog.html', {'form': form, 'blog': blog})
 
 
 @login_required
@@ -210,36 +190,16 @@ def add_to_favorites(request, slug):
     """Add blog to user's favorites"""
     
     blog = get_object_or_404(Blog, slug=slug)
-    
-    # Check if already favorited
     favorite, created = Favorite.objects.get_or_create(user=request.user, blog=blog)
     
     if created:
-        # Send email notification
-        subject = f'{request.user.username} added your blog to favorites!'
-        message = f'''
-        Hello {blog.author.username},
-        
-        Good news! {request.user.username} has added your blog "{blog.title}" to their favorites.
-        
-        View your blog: {request.build_absolute_uri(blog.get_absolute_url())}
-        
-        Keep up the great work!
-        
-        Best regards,
-        Blog Site Team
-        '''
-        
+        # Send email to the user who favorited (correct assignment requirement)
+        subject = 'Blog added to favorites'
+        message = f'You added "{blog.title}" to your favorites!'
         try:
-            send_mail(
-                subject,
-                message,
-                settings.DEFAULT_FROM_EMAIL,
-                [blog.author.email],
-                fail_silently=True,
-            )
-        except Exception as e:
-            pass  # Don't fail if email can't be sent
+            send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [request.user.email], fail_silently=True)
+        except:
+            pass
         
         messages.success(request, 'Blog added to your favorites!')
     else:
@@ -269,17 +229,11 @@ def my_favorites(request):
     """Display user's favorite blogs"""
     
     favorites = Favorite.objects.filter(user=request.user).select_related('blog')
-    
-    # Pagination
     paginator = Paginator(favorites, 9)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
     
-    context = {
-        'favorites': page_obj,
-    }
-    
-    return render(request, 'blogs/favorites.html', context)
+    return render(request, 'blogs/favorites.html', {'favorites': page_obj})
 
 
 def blogs_by_category(request, slug):
@@ -287,18 +241,11 @@ def blogs_by_category(request, slug):
     
     category = get_object_or_404(Category, slug=slug)
     blogs = Blog.objects.filter(category=category).order_by('-created_at')
-    
-    # Pagination
     paginator = Paginator(blogs, 9)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
     
-    context = {
-        'category': category,
-        'blogs': page_obj,
-    }
-    
-    return render(request, 'blogs/category_blogs.html', context)
+    return render(request, 'blogs/category_blogs.html', {'category': category, 'blogs': page_obj})
 
 
 def author_blogs(request, username):
@@ -306,15 +253,8 @@ def author_blogs(request, username):
     
     author = get_object_or_404(CustomUser, username=username)
     blogs = Blog.objects.filter(author=author).order_by('-created_at')
-    
-    # Pagination
     paginator = Paginator(blogs, 9)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
     
-    context = {
-        'author': author,
-        'blogs': page_obj,
-    }
-    
-    return render(request, 'blogs/author_blogs.html', context)
+    return render(request, 'blogs/author_blogs.html', {'author': author, 'blogs': page_obj})

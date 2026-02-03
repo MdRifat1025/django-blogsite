@@ -1,6 +1,6 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
-from django.contrib.auth import login, logout, authenticate
+from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
 from django.core.mail import send_mail
 from django.conf import settings
@@ -25,7 +25,7 @@ def register(request):
             user.email_verification_token = token
             user.save()
             
-            # Create profile for the user
+            # Ensure profile exists (safe)
             Profile.objects.get_or_create(user=user)
             
             # Send verification email
@@ -34,20 +34,19 @@ def register(request):
             )
             
             subject = 'Verify your email address'
-            message = f'''
-            Hello {user.username},
-            
-            Thank you for registering at Blog Site!
-            
-            Please click the link below to verify your email address and activate your account:
-            {verification_url}
-            
-            If you didn't create this account, please ignore this email.
-            
-            Best regards,
-            Blog Site Team
-            '''
-            
+            message = f"""
+Hello {user.username},
+
+Thank you for registering at Blog Site!
+
+Please click the link below to verify your email address and activate your account:
+{verification_url}
+
+If you didn't create this account, please ignore this email.
+
+Best regards,
+Blog Site Team
+"""
             try:
                 send_mail(
                     subject,
@@ -56,12 +55,10 @@ def register(request):
                     [user.email],
                     fail_silently=False,
                 )
-                messages.success(request, 
-                    'Registration successful! Please check your email to verify your account.')
+                messages.success(request, 'Registration successful! Please check your email to verify your account.')
                 return redirect('login')
-            except Exception as e:
-                messages.error(request, 
-                    f'Registration successful but email could not be sent. Please contact support.')
+            except Exception:
+                messages.error(request, 'Registration successful but email could not be sent. Please contact support.')
                 return redirect('login')
     else:
         form = UserRegisterForm()
@@ -78,13 +75,10 @@ def verify_email(request, token):
         user.is_email_verified = True
         user.email_verification_token = None
         user.save()
-        
-        messages.success(request, 
-            'Your email has been verified successfully! You can now login.')
+        messages.success(request, 'Your email has been verified successfully! You can now login.')
         return redirect('login')
     except CustomUser.DoesNotExist:
-        messages.error(request, 
-            'Invalid verification link. Please try again or contact support.')
+        messages.error(request, 'Invalid verification link. Please try again or contact support.')
         return redirect('register')
 
 
@@ -97,23 +91,16 @@ def user_login(request):
     if request.method == 'POST':
         form = UserLoginForm(request, data=request.POST)
         if form.is_valid():
-            username = form.cleaned_data.get('username')
-            password = form.cleaned_data.get('password')
-            user = authenticate(username=username, password=password)
-            
-            if user is not None:
-                if user.is_active:
-                    login(request, user)
-                    messages.success(request, f'Welcome back, {username}!')
-                    
-                    # Redirect to next page if available
-                    next_page = request.GET.get('next')
-                    return redirect(next_page) if next_page else redirect('blog-home')
-                else:
-                    messages.error(request, 
-                        'Your account is not activated. Please check your email for verification link.')
+            user = form.get_user()  #  safer than authenticate manually
+
+            if not user.is_active:
+                messages.error(request, 'Your account is not activated. Please check your email for verification link.')
             else:
-                messages.error(request, 'Invalid username or password.')
+                login(request, user)
+                messages.success(request, f'Welcome back, {user.username}!')
+                
+                next_page = request.GET.get('next')
+                return redirect(next_page) if next_page else redirect('blog-home')
         else:
             messages.error(request, 'Invalid username or password.')
     else:
@@ -135,20 +122,13 @@ def user_logout(request):
 def profile(request, username=None):
     """Display user profile"""
     
-    if username:
-        user = get_object_or_404(CustomUser, username=username)
-    else:
-        user = request.user
+    user = get_object_or_404(CustomUser, username=username) if username else request.user
+    profile_obj, _ = Profile.objects.get_or_create(user=user)  # safe access
     
-    profile_obj = user.profile
+    # User's blogs if author
+    blogs = Blog.objects.filter(author=user).order_by('-created_at') if user.role == 'author' else None
     
-    # Get user's blogs if author
-    if user.role == 'author':
-        blogs = Blog.objects.filter(author=user).order_by('-created_at')
-    else:
-        blogs = None
-    
-    # Get user's favorites
+    # User's favorites
     favorites = user.favorites.all()
     
     context = {
@@ -166,9 +146,11 @@ def profile(request, username=None):
 def edit_profile(request):
     """Edit user profile"""
     
+    profile_obj, _ = Profile.objects.get_or_create(user=request.user)
+    
     if request.method == 'POST':
         u_form = UserUpdateForm(request.POST, instance=request.user)
-        p_form = ProfileUpdateForm(request.POST, request.FILES, instance=request.user.profile)
+        p_form = ProfileUpdateForm(request.POST, request.FILES, instance=profile_obj)
         
         if u_form.is_valid() and p_form.is_valid():
             u_form.save()
@@ -177,11 +159,6 @@ def edit_profile(request):
             return redirect('profile', username=request.user.username)
     else:
         u_form = UserUpdateForm(instance=request.user)
-        p_form = ProfileUpdateForm(instance=request.user.profile)
+        p_form = ProfileUpdateForm(instance=profile_obj)
     
-    context = {
-        'u_form': u_form,
-        'p_form': p_form,
-    }
-    
-    return render(request, 'users/edit_profile.html', context)
+    return render(request, 'users/edit_profile.html', {'u_form': u_form, 'p_form': p_form})

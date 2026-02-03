@@ -112,15 +112,15 @@ AUTH_USER_MODEL = 'users.CustomUser'
 # Crispy Forms
 CRISPY_ALLOWED_TEMPLATE_PACKS = "bootstrap5"
 CRISPY_TEMPLATE_PACK = "bootstrap5"
-
+# bqta wsgh harn exjf 
 # Email Configuration
 EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
 EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.gmail.com')
 EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587'))
 EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True') == 'True'
-EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
-EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
-DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'noreply@blogsite.com')
+EMAIL_HOST_USER = 'rifatsarkercse@gmail.com'  # your Gmail address
+EMAIL_HOST_PASSWORD = 'bqta wsgh harn exjf'   # the 16-character app password
+DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 
 # Login settings
 LOGIN_REDIRECT_URL = 'blog-home'
